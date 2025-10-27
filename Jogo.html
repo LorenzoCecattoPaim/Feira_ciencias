@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jogo de Probabilidade — Urna</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#7dd3fc;--muted:#94a3b8;--glass:rgba(255,255,255,0.03)}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:#e6eef6;background:linear-gradient(180deg,#071129 0%, #071826 100%)}
+    .wrap{max-width:960px;margin:36px auto;padding:20px}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+    .logo{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#60a5fa);display:flex;align-items:center;justify-content:center;font-weight:700;color:#052025}
+    h1{font-size:20px;margin:0}
+    p.lead{margin:4px 0 0;color:var(--muted)}
+
+    .grid{display:grid;grid-template-columns:320px 1fr;gap:18px}
+    .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 24px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
+
+    .control label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px}
+    input[type=range]{width:100%}
+    .row{display:flex;gap:8px;align-items:center}
+    .row.space{justify-content:space-between}
+    .big{font-size:28px;font-weight:700}
+    .muted{color:var(--muted);font-size:13px}
+
+    button{background:linear-gradient(180deg,#1f6feb,#0957d3);border:none;color:white;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+    button.alt{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .result{margin-top:12px;padding:12px;border-radius:8px;background:var(--glass);color:#dff6ff}
+
+    .canvas-wrap{display:flex;flex-direction:column;gap:12px}
+    .explain{background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-radius:8px;color:var(--muted);font-size:14px}
+
+    footer{margin-top:14px;color:var(--muted);font-size:13px}
+
+    @media (max-width:800px){.grid{grid-template-columns:1fr}.logo{display:none}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">P</div>
+      <div>
+        <h1>Jogo de Probabilidade — Urna</h1>
+        <p class="lead">Experimente tirar bolas de uma urna para aprender probabilidade teórica versus experimental.</p>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="control">
+          <label>Bolas vermelhas: <span id="redCountDisplay">3</span></label>
+          <input id="redCount" type="range" min="1" max="20" value="3">
+        </div>
+
+        <div class="control" style="margin-top:12px">
+          <label>Bolas azuis: <span id="blueCountDisplay">2</span></label>
+          <input id="blueCount" type="range" min="0" max="20" value="2">
+        </div>
+
+        <div style="margin-top:12px" class="row space">
+          <div>
+            <label>Número de retiradas por simulação</label>
+            <input id="drawsPerSim" type="number" min="1" max="1000" value="1" style="width:110px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+          </div>
+          <div>
+            <label>Número de simulações</label>
+            <input id="nSims" type="number" min="1" max="200000" value="1000" style="width:110px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button id="oneDrawBtn">Tentar 1 vez</button>
+          <button id="simulateBtn">Simular (empírico)</button>
+          <button id="resetBtn" class="alt">Reset</button>
+        </div>
+
+        <div class="result" id="resultBox" style="display:none"></div>
+      </div>
+
+      <div class="card canvas-wrap">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="muted">Probabilidade teórica de tirar uma <strong>bola vermelha</strong> em 1 retirada</div>
+            <div class="big" id="theoreticalP">—</div>
+            <div class="muted" id="theoryExplain">—</div>
+          </div>
+          <div>
+            <div class="muted">Resultados experimentais</div>
+            <div style="font-weight:700;font-size:20px" id="empiricalP">—</div>
+            <div class="muted">(após simulações)</div>
+          </div>
+        </div>
+
+        <canvas id="chart" width="600" height="180" style="width:100%;height:180px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02))"></canvas>
+
+        <div class="explain">
+          <strong>Como usar</strong>: ajuste a quantidade de bolas vermelhas e azuis à esquerda. Depois clique em "Tentar 1 vez" para ver o resultado de uma retirada, ou em "Simular" para executar N simulações e comparar a frequência empírica com a probabilidade teórica. A simulação considera retirada com reposição (cada retirada tem a mesma distribuição).
+        </div>
+
+        <footer>
+          Probabilidade Urna _ Pedro e Lorenzo-212
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Elementos
+    const redRange = document.getElementById('redCount');
+    const blueRange = document.getElementById('blueCount');
+    const redDisplay = document.getElementById('redCountDisplay');
+    const blueDisplay = document.getElementById('blueCountDisplay');
+    const theoreticalP = document.getElementById('theoreticalP');
+    const theoryExplain = document.getElementById('theoryExplain');
+    const oneDrawBtn = document.getElementById('oneDrawBtn');
+    const simulateBtn = document.getElementById('simulateBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const resultBox = document.getElementById('resultBox');
+    const nSimsInput = document.getElementById('nSims');
+    const drawsPerSimInput = document.getElementById('drawsPerSim');
+    const empiricalP = document.getElementById('empiricalP');
+    const canvas = document.getElementById('chart');
+    const ctx = canvas.getContext('2d');
+
+    function updateDisplays(){
+      const r = parseInt(redRange.value,10);
+      const b = parseInt(blueRange.value,10);
+      redDisplay.textContent = r;
+      blueDisplay.textContent = b;
+      const total = r + b;
+      if(total === 0){
+        theoreticalP.textContent = '—';
+        theoryExplain.textContent = 'A urna está vazia. Adicione bolas.';
+      } else {
+        const p = r/total;
+        theoreticalP.textContent = (p*100).toFixed(2) + '%';
+        theoryExplain.textContent = `${r}/${total} = ${p.toFixed(4)} (probabilidade de vermelho)`;
+      }
+    }
+
+    redRange.addEventListener('input', updateDisplays);
+    blueRange.addEventListener('input', updateDisplays);
+    updateDisplays();
+
+    function drawChart(redCount, blueCount, redEmpirical, blueEmpirical){
+      // Clear
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // scales
+      const pad = 24;
+      const w = canvas.width - pad*2;
+      const h = canvas.height - pad*2;
+
+      // theoretical bars
+      const total = redCount + blueCount;
+      const pRed = total ? redCount/total : 0;
+      const pBlue = total ? blueCount/total : 0;
+
+      // bar widths
+      const bw = w/4;
+      const redH = h * pRed;
+      const blueH = h * pBlue;
+
+      // empirical bars normalized
+      const empTotal = redEmpirical + blueEmpirical || 1;
+      const eRedH = h * (redEmpirical/empTotal);
+      const eBlueH = h * (blueEmpirical/empTotal);
+
+      // draw axes labels
+      ctx.font = '12px Inter, system-ui';
+      ctx.fillStyle = '#cfeefc';
+      ctx.fillText('Teórico', pad + 10, pad - 6);
+      ctx.fillText('Empírico', pad + bw + 60, pad - 6);
+
+      // draw theoretical red
+      const xT = pad + 20;
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(xT, pad + (h - redH), bw, redH);
+      ctx.fillStyle = '#cfeefc';
+      ctx.fillText(`Vermelho ${(pRed*100).toFixed(1)}%`, xT, pad + h + 16);
+
+      // theoretical blue
+      const xTb = xT + bw + 10;
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillRect(xTb, pad + (h - blueH), bw, blueH);
+      ctx.fillStyle = '#cfeefc';
+      ctx.fillText(`Azul ${(pBlue*100).toFixed(1)}%`, xTb, pad + h + 16);
+
+      // empirical bars
+      const xE = pad + bw*2 + 90;
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(xE, pad + (h - eRedH), bw, eRedH);
+      ctx.fillStyle = '#cfeefc';
+      ctx.fillText(`Vermelho ${(100*redEmpirical/empTotal).toFixed(1)}%`, xE, pad + h + 16);
+
+      const xEb = xE + bw + 10;
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillRect(xEb, pad + (h - eBlueH), bw, eBlueH);
+      ctx.fillStyle = '#cfeefc';
+      ctx.fillText(`Azul ${(100*blueEmpirical/empTotal).toFixed(1)}%`, xEb, pad + h + 16);
+
+      // small legend
+      ctx.fillStyle = '#ef4444'; ctx.fillRect(canvas.width - 140, 16, 12, 12); ctx.fillStyle='#cfeefc'; ctx.fillText('Vermelho', canvas.width - 120, 26);
+      ctx.fillStyle = '#3b82f6'; ctx.fillRect(canvas.width - 140, 36, 12, 12); ctx.fillStyle='#cfeefc'; ctx.fillText('Azul', canvas.width - 120, 46);
+    }
+
+    // Single draw: with replacement
+    oneDrawBtn.addEventListener('click', ()=>{
+      const r = parseInt(redRange.value,10);
+      const b = parseInt(blueRange.value,10);
+      const total = r + b;
+      if(total === 0){
+        resultBox.style.display = 'block';
+        resultBox.textContent = 'Urna vazia! Ajuste as bolas.';
+        return;
+      }
+      // draw a random ball
+      const x = Math.random() * total;
+      const isRed = x < r;
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = isRed ? '<strong>Você tirou uma bola VERMELHA!</strong>' : '<strong>Você tirou uma bola AZUL.</strong>';
+
+      // update chart with single empirical result
+      drawChart(r,b, isRed?1:0, isRed?0:1);
+      empiricalP.textContent = isRed ? '100% (1/1)' : '0% (0/1)';
+    });
+
+    // Simulation (many trials)
+    simulateBtn.addEventListener('click', ()=>{
+      const r = parseInt(redRange.value,10);
+      const b = parseInt(blueRange.value,10);
+      const total = r + b;
+      if(total === 0){
+        resultBox.style.display = 'block';
+        resultBox.textContent = 'Urna vazia! Ajuste as bolas.';
+        return;
+      }
+      const nSims = Math.min(200000, Math.max(1, parseInt(nSimsInput.value,10)||1000));
+      const drawsPerSim = Math.min(1000, Math.max(1, parseInt(drawsPerSimInput.value,10)||1));
+
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `Executando ${nSims} simulações (${drawsPerSim} retiradas cada) — isso pode levar alguns segundos...`;
+
+      // Run simulation: for each simulation, count number of red in drawsPerSim; we count totals across all individual draws (so empirical frequency per single draw)
+      let redTotal = 0;
+      let blueTotal = 0;
+      for(let i=0;i<nSims;i++){
+        for(let j=0;j<drawsPerSim;j++){
+          const x = Math.random() * total;
+          if(x < r) redTotal++; else blueTotal++;
+        }
+      }
+
+      const empirical = redTotal / (redTotal + blueTotal);
+      empiricalP.textContent = (empirical*100).toFixed(3) + '%';
+      resultBox.innerHTML = `<strong>Simulação completa.</strong><br>Vermelhas: ${redTotal} — Azuis: ${blueTotal} — Frequência vermelha: ${(empirical*100).toFixed(3)}%`;
+      drawChart(r,b,redTotal,blueTotal);
+    });
+
+    resetBtn.addEventListener('click', ()=>{
+      redRange.value = 3; blueRange.value = 2; nSimsInput.value = 1000; drawsPerSimInput.value = 1;
+      updateDisplays();
+      resultBox.style.display = 'none';
+      empiricalP.textContent = '—';
+      drawChart(3,2,0,0);
+    });
+
+    // initial chart
+    drawChart(3,2,0,0);
+  </script>
+</body>
+</html>
